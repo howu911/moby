@@ -178,7 +178,7 @@ func createContainer(ctx context.Context, dockerCli *command.DockerCli, config *
 		}
 	}
 
-	//create the container
+	//create the container  使用post方式发送container creat命令的json数据交由docker服务端处理
 	response, err := dockerCli.Client().ContainerCreate(ctx, config, hostConfig, networkingConfig, name)
 
 	//if image not found try to pull it

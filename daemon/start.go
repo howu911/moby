@@ -24,6 +24,7 @@ func (daemon *Daemon) ContainerStart(name string, hostConfig *containertypes.Hos
 		return apierrors.NewBadRequestError(fmt.Errorf("checkpoint is only supported in experimental mode"))
 	}
 
+	//可以根据全容器ID、容器名、容器ID前缀获取容器对象
 	container, err := daemon.GetContainer(name)
 	if err != nil {
 		return err
@@ -84,6 +85,7 @@ func (daemon *Daemon) ContainerStart(name string, hostConfig *containertypes.Hos
 		}
 	}
 
+	//调用containerStart进一步启动容器，3.详细分析
 	return daemon.containerStart(container, checkpoint, checkpointDir, true)
 }
 
@@ -134,6 +136,7 @@ func (daemon *Daemon) containerStart(container *container.Container, checkpoint 
 		}
 	}()
 
+	//在创建的时候调用了一次，这次start又mount一次？ 这里是准备容器的rootfs，即合并为merged
 	if err := daemon.conditionalMountOnStart(container); err != nil {
 		return err
 	}
@@ -142,6 +145,7 @@ func (daemon *Daemon) containerStart(container *container.Container, checkpoint 
 	// backwards API compatibility.
 	container.HostConfig = runconfig.SetDefaultNetModeIfBlank(container.HostConfig)
 
+	//3.1对网络进行初始化，后面再详细分析
 	if err := daemon.initializeNetworking(container); err != nil {
 		return err
 	}
@@ -164,6 +168,7 @@ func (daemon *Daemon) containerStart(container *container.Container, checkpoint 
 		checkpointDir = container.CheckpointDir()
 	}
 
+	//调用daemon.containerd.Create()进一步启动，后面4.再详细分析
 	if err := daemon.containerd.Create(container.ID, checkpoint, checkpointDir, *spec, container.InitializeStdio, createOptions...); err != nil {
 		errDesc := grpc.ErrorDesc(err)
 		contains := func(s1, s2 string) bool {

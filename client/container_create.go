@@ -42,6 +42,7 @@ func (cli *Client) ContainerCreate(ctx context.Context, config *container.Config
 		NetworkingConfig: networkingConfig,
 	}
 
+	// 向docker服务端发送post请求
 	serverResp, err := cli.post(ctx, "/containers/create", query, body, nil)
 	if err != nil {
 		if serverResp.statusCode == 404 && strings.Contains(err.Error(), "No such image") {

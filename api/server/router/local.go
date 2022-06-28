@@ -10,9 +10,9 @@ import (
 // localRoute defines an individual API route to connect
 // with the docker daemon. It implements Route.
 type localRoute struct {
-	method  string
-	path    string
-	handler httputils.APIFunc
+	method  string            //该路由中方法名
+	path    string            //该路由中方法所在的路径
+	handler httputils.APIFunc //该方法的handler
 }
 
 // Handler returns the APIFunc to let the server wrap it in middlewares.

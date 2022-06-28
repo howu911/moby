@@ -40,6 +40,7 @@ func (daemon *Daemon) containerCreate(params types.ContainerCreateConfig, manage
 		return containertypes.ContainerCreateCreatedBody{}, fmt.Errorf("Config cannot be empty in order to create a container")
 	}
 
+	//验证HostConfig、Config的信息正确性。
 	warnings, err := daemon.verifyContainerSettings(params.HostConfig, params.Config, false)
 	if err != nil {
 		return containertypes.ContainerCreateCreatedBody{Warnings: warnings}, err
@@ -50,20 +51,24 @@ func (daemon *Daemon) containerCreate(params types.ContainerCreateConfig, manage
 		return containertypes.ContainerCreateCreatedBody{Warnings: warnings}, err
 	}
 
+	//如果配置hostConfig为空，则使用默认值
 	if params.HostConfig == nil {
 		params.HostConfig = &containertypes.HostConfig{}
 	}
+	//修改hostconfig的不正常值，例如CPUShares、Memory
 	err = daemon.adaptContainerSettings(params.HostConfig, params.AdjustCPUShares)
 	if err != nil {
 		return containertypes.ContainerCreateCreatedBody{Warnings: warnings}, err
 	}
 
+	//进一步调用daemon的create(),这里managed为false，还不了解是这个值的作用，用到时再分析
 	container, err := daemon.create(params, managed)
 	if err != nil {
 		return containertypes.ContainerCreateCreatedBody{Warnings: warnings}, daemon.imageNotExistToErrcode(err)
 	}
 	containerActions.WithValues("create").UpdateSince(start)
 
+	//返回运行结果
 	return containertypes.ContainerCreateCreatedBody{ID: container.ID, Warnings: warnings}, nil
 }
 
@@ -76,6 +81,7 @@ func (daemon *Daemon) create(params types.ContainerCreateConfig, managed bool) (
 		err       error
 	)
 
+	//查找Image
 	if params.Config.Image != "" {
 		img, err = daemon.GetImage(params.Config.Image)
 		if err != nil {
@@ -88,14 +94,17 @@ func (daemon *Daemon) create(params types.ContainerCreateConfig, managed bool) (
 		imgID = img.ID()
 	}
 
+	//将用户指定的Config参数与镜像json文件中的config合并并验证
 	if err := daemon.mergeAndVerifyConfig(params.Config, img); err != nil {
 		return nil, err
 	}
 
+	//如果没有指定container log driver，将daemon log config与container log config合并
 	if err := daemon.mergeAndVerifyLogConfig(&params.HostConfig.LogConfig); err != nil {
 		return nil, err
 	}
 
+	//进一步调用daemon包下的newContainer函数，下面再详细分析
 	if container, err = daemon.newContainer(params.Name, params.Config, params.HostConfig, imgID, managed); err != nil {
 		return nil, err
 	}
@@ -114,14 +123,18 @@ func (daemon *Daemon) create(params types.ContainerCreateConfig, managed bool) (
 	container.HostConfig.StorageOpt = params.HostConfig.StorageOpt
 
 	// Set RWLayer for container after mount labels have been set
+	//挂载了labels后，为容器设置读写层
 	if err := daemon.setRWLayer(container); err != nil {
 		return nil, err
 	}
 
+	//retrieves the remapped root uid/gid pair from the set of maps
+	//If the maps are empty, then the root uid/gid will default to "real" 0/0
 	rootUID, rootGID, err := idtools.GetRootUIDGID(daemon.uidMaps, daemon.gidMaps)
 	if err != nil {
 		return nil, err
 	}
+	//以 root uid gid的属性创建目录，在/var/lib/docker/containers目录下创建容器文件，并在容器文件下创建checkpoints目录
 	if err := idtools.MkdirAs(container.Root, 0700, rootUID, rootGID); err != nil {
 		return nil, err
 	}
@@ -129,10 +142,15 @@ func (daemon *Daemon) create(params types.ContainerCreateConfig, managed bool) (
 		return nil, err
 	}
 
+	/*
+		1.daemon.registerMountPoints(),注册所有挂载到容器的数据卷
+		2.daemon.registerLinks(),记录父子以及别名之间的关系，将 hostconfig 写入文件 hostconfig.json
+	*/
 	if err := daemon.setHostConfig(container, params.HostConfig); err != nil {
 		return nil, err
 	}
 
+	//daemon.Mount()函数在 /var/lib/docker/aufs/mnt 目录下创建文件，以及设置工作目录
 	if err := daemon.createContainerPlatformSpecificSettings(container, params.Config, params.HostConfig); err != nil {
 		return nil, err
 	}
@@ -143,18 +161,24 @@ func (daemon *Daemon) create(params types.ContainerCreateConfig, managed bool) (
 	}
 	// Make sure NetworkMode has an acceptable value. We do this to ensure
 	// backwards API compatibility.
+	//如果没有设置网络，将网络模式设置为 default
 	container.HostConfig = runconfig.SetDefaultNetModeIfBlank(container.HostConfig)
 
+	//更新网络设置
 	daemon.updateContainerNetworkSettings(container, endpointsConfigs)
 
+	//将container对象json化后写入本地磁盘进行持久化
 	if err := container.ToDisk(); err != nil {
 		logrus.Errorf("Error saving new container to disk: %v", err)
 		return nil, err
 	}
+	//在Daemon中注册新建的container对象
 	if err := daemon.Register(container); err != nil {
 		return nil, err
 	}
+	//生成一个只有默认属性容器相关事件
 	daemon.LogContainerEvent(container, "create")
+	//将container对象返回
 	return container, nil
 }
 

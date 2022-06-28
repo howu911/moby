@@ -32,11 +32,11 @@ type Config struct {
 
 // Server contains instance details for the server
 type Server struct {
-	cfg           *Config
-	servers       []*HTTPServer
-	routers       []router.Router
-	routerSwapper *routerSwapper
-	middlewares   []middleware.Middleware
+	cfg           *Config                 //apiserver的配置信息
+	servers       []*HTTPServer           //httpServer结构体对象，包括http.Server和net.Listener监听器。
+	routers       []router.Router         //路由表对象Route,包括Handler,Method, Path
+	routerSwapper *routerSwapper          //路由交换器对象，使用新的路由交换旧的路由器
+	middlewares   []middleware.Middleware //中间件
 }
 
 // New returns a new instance of the server based on the specified configuration.
@@ -151,27 +151,36 @@ func (s *Server) makeHTTPHandler(handler httputils.APIFunc) http.HandlerFunc {
 // InitRouter initializes the list of routers for the server.
 // This method also enables the Go profiler if enableProfiler is true.
 func (s *Server) InitRouter(enableProfiler bool, routers ...router.Router) {
-	s.routers = append(s.routers, routers...)
+	s.routers = append(s.routers, routers...) //将创建好的路由表信息追加到apiServer对象中的routers
 
-	m := s.createMux()
+	m := s.createMux() //追加后再次初始化apiServer路由器进行更新
 	if enableProfiler {
 		profilerSetup(m)
 	}
-	s.routerSwapper = &routerSwapper{
+	s.routerSwapper = &routerSwapper{ //这里设置好了mux.Route之后，将该route设置到apiServer的路由交换器中去，至此所有deamon.start（）的相关工作处理完毕
 		router: m,
 	}
 }
 
 // createMux initializes the main router the server uses.
 func (s *Server) createMux() *mux.Router {
+	/*
+		mux位于vendor/github.com/gorilla/mux,该函数新建一个mux.go中的Route（路由数据项）对象并追加到mux.Router结构体中的成员routes中去，然后返回该路由器mux.Route m
+	*/
 	m := mux.NewRouter()
 
 	logrus.Debug("Registering routers")
+	//遍历所有apiserver中的api路由器如：container
 	for _, apiRouter := range s.routers {
+		//遍历每个apiRouter的子命令路由r如"/containers/create"
 		for _, r := range apiRouter.Routes() {
+			//给每个r的路由handler包裹了一层中间件（这里还不是很清楚）
 			f := s.makeHTTPHandler(r.Handler())
 
 			logrus.Debugf("Registering %s, %s", r.Method(), r.Path())
+			/*
+				在mux.Route路由结构中根据这个r.Path()路径设置一个适配器来匹配方法method和handler，当满足versionMatcher+r.Path()路径的正则表达式要求就可以适配到相应的方法名及该handler
+			*/
 			m.Path(versionMatcher + r.Path()).Methods(r.Method()).Handler(f)
 			m.Path(r.Path()).Methods(r.Method()).Handler(f)
 		}

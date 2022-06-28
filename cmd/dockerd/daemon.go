@@ -54,12 +54,12 @@ const (
 
 // DaemonCli represents the daemon CLI.
 type DaemonCli struct {
-	*daemon.Config
-	configFile *string
-	flags      *pflag.FlagSet
+	*daemon.Config                // 配置信息
+	configFile     *string        // 配置文件
+	flags          *pflag.FlagSet // flag参数信息
 
-	api             *apiserver.Server
-	d               *daemon.Daemon
+	api             *apiserver.Server         //APIServer:提供api服务，定义在docker/api/server/server.go
+	d               *daemon.Daemon            //Daemon对象,结构体定义在daemon/daemon.go文件中
 	authzMiddleware *authorization.Middleware // authzMiddleware enables to dynamically reload the authorization plugins
 }
 
@@ -121,11 +121,14 @@ func (cli *DaemonCli) start(opts daemonOptions) (err error) {
 	// warn from uuid package when running the daemon
 	uuid.Loggerf = logrus.Warnf
 
+	//1.设置默认可选项参数
 	opts.common.SetDefaultOptions(opts.flags)
 
+	//2.根据opts对象信息来加载DaemonCli的配置信息config对象，并将该config对象配置到DaemonCli结构体对象中去
 	if cli.Config, err = loadDaemonCliConfig(opts); err != nil {
 		return err
 	}
+	//3.对DaemonCli结构体中的其它成员根据opts进行配置
 	cli.configFile = &opts.configFile
 	cli.flags = opts.flags
 
@@ -176,6 +179,7 @@ func (cli *DaemonCli) start(opts daemonOptions) (err error) {
 		}()
 	}
 
+	//4.根据DaemonCli结构体对象中的信息定义APIServer配置信息结构体对象&apiserver.Config(包括tls传输层协议信息)
 	serverConfig := &apiserver.Config{
 		Logging:     true,
 		SocketGroup: cli.Config.SocketGroup,
@@ -206,11 +210,13 @@ func (cli *DaemonCli) start(opts daemonOptions) (err error) {
 		cli.Config.Hosts = make([]string, 1)
 	}
 
+	//5.根据定义好的&apiserver.Config新建APIServer对象，并赋值到DaemonCli实例的对应属性中
 	api := apiserver.New(serverConfig)
 	cli.api = api
 
 	for i := 0; i < len(cli.Config.Hosts); i++ {
 		var err error
+		//6.解析host文件及传输协议（tcp）等内容
 		if cli.Config.Hosts[i], err = dopts.ParseHost(cli.Config.TLS, cli.Config.Hosts[i]); err != nil {
 			return fmt.Errorf("error parsing -H %s : %v", cli.Config.Hosts[i], err)
 		}
@@ -228,6 +234,7 @@ func (cli *DaemonCli) start(opts daemonOptions) (err error) {
 		if proto == "tcp" && (serverConfig.TLSConfig == nil || serverConfig.TLSConfig.ClientAuth != tls.RequireAndVerifyClientCert) {
 			logrus.Warn("[!] DON'T BIND ON ANY IP ADDRESS WITHOUT setting -tlsverify IF YOU DON'T KNOW WHAT YOU'RE DOING [!]")
 		}
+		//7.根据host解析内容初始化监听器listener.Init()
 		ls, err := listeners.Init(proto, addr, serverConfig.SocketGroup, serverConfig.TLSConfig)
 		if err != nil {
 			return err
@@ -240,6 +247,7 @@ func (cli *DaemonCli) start(opts daemonOptions) (err error) {
 			}
 		}
 		logrus.Debugf("Listener created for HTTP on %s (%s)", proto, addr)
+		//8.为建立好的APIServer设置我们初始化的监听器listener，可以监听该地址的连接
 		api.Accept(addr, ls...)
 	}
 
@@ -250,16 +258,23 @@ func (cli *DaemonCli) start(opts daemonOptions) (err error) {
 	// FIXME: why is this down here instead of with the other TrustKey logic above?
 	cli.TrustKeyPath = opts.common.TrustKey
 
+	//9.根据DaemonCli.Config.ServiceOptions来注册一个新的服务对象
 	registryService := registry.NewService(cli.Config.ServiceOptions)
+	//10.根据DaemonCli中的相关信息来新建libcontainerd对象
 	containerdRemote, err := libcontainerd.New(cli.getLibcontainerdRoot(), cli.getPlatformRemoteOptions()...)
 	if err != nil {
 		return err
 	}
+	/*
+		11.设置信号捕获,进入Trap()函数，可以看到os.Interrupt, syscall.SIGTERM, syscall.SIGQUIT, syscall.SIGPIPE
+		四种信号，这里传入一个cleanup()函数，当捕获到这四种信号时，可以利用该函数进行shutdown善后处理
+	*/
 	signal.Trap(func() {
 		cli.stop()
 		<-stopc // wait for daemonCli.start() to return
 	})
 
+	//13.根据DaemonCli的配置信息，注册的服务对象及libcontainerd对象来构建Daemon对象
 	d, err := daemon.NewDaemon(cli.Config, registryService, containerdRemote)
 	if err != nil {
 		return fmt.Errorf("Error starting daemon: %v", err)
@@ -276,6 +291,7 @@ func (cli *DaemonCli) start(opts daemonOptions) (err error) {
 
 	name, _ := os.Hostname()
 
+	//14.新建cluster对象
 	c, err := cluster.New(cluster.Config{
 		Root:                   cli.Config.Root,
 		Name:                   name,
@@ -291,6 +307,7 @@ func (cli *DaemonCli) start(opts daemonOptions) (err error) {
 	// Restart all autostart containers which has a swarm endpoint
 	// and is not yet running now that we have successfully
 	// initialized the cluster.
+	//15.重启Swarm容器
 	d.RestartSwarmContainers()
 
 	logrus.Info("Daemon has completed initialization")
@@ -301,6 +318,7 @@ func (cli *DaemonCli) start(opts daemonOptions) (err error) {
 		"graphdriver": d.GraphDriverName(),
 	}).Info("Docker daemon")
 
+	//16.将新建的Daemon对象与DaemonCli相关联
 	cli.d = d
 
 	// initMiddlewares needs cli.d to be populated. Dont change this init order.
@@ -308,6 +326,7 @@ func (cli *DaemonCli) start(opts daemonOptions) (err error) {
 		logrus.Fatalf("Error creating middlewares: %v", err)
 	}
 	d.SetCluster(c)
+	//17.初始化路由器
 	initRouter(api, d, c)
 
 	cli.setupConfigReloadTrap()
@@ -315,17 +334,23 @@ func (cli *DaemonCli) start(opts daemonOptions) (err error) {
 	// The serve API routine never exits unless an error occurs
 	// We need to start it as a goroutine and wait on it so
 	// daemon doesn't exit
+	//18.新建goroutine来监听apiserver执行情况，当执行报错时通道serverAPIWait就会传出错误信息
 	serveAPIWait := make(chan error)
 	go api.Wait(serveAPIWait)
 
 	// after the daemon is done setting up we can notify systemd api
+	//19.通知系统Daemon已经安装完成，可以提供api服务了
 	notifySystem()
 
 	// Daemon is fully initialized and handling API traffic
 	// Wait for serve API to complete
+	//20.等待apiserver执行出现错误，没有错误则会阻塞到该语句，直到server API完成
 	errAPI := <-serveAPIWait
+	//21.执行到这一步说明，serverAPIWait有错误信息传出（一下均是），所以对cluster进行清理操作
 	c.Cleanup()
+	//22.关闭Daemon
 	shutdownDaemon(d)
+	//23.关闭libcontainerd
 	containerdRemote.Cleanup()
 	if errAPI != nil {
 		return fmt.Errorf("Shutting down due to ServeAPI error: %v", errAPI)
@@ -459,12 +484,12 @@ func loadDaemonCliConfig(opts daemonOptions) (*daemon.Config, error) {
 }
 
 func initRouter(s *apiserver.Server, d *daemon.Daemon, c *cluster.Cluster) {
-	decoder := runconfig.ContainerDecoder{}
+	decoder := runconfig.ContainerDecoder{} //获取解码器
 
 	routers := []router.Router{
 		// we need to add the checkpoint router before the container router or the DELETE gets masked
 		checkpointrouter.NewRouter(d, decoder),
-		container.NewRouter(d, decoder),
+		container.NewRouter(d, decoder), //与container的路由，例如/containers/create,/containers/{name:.*}/start
 		image.NewRouter(d, decoder),
 		systemrouter.NewRouter(d, c),
 		volume.NewRouter(d),
@@ -473,10 +498,12 @@ func initRouter(s *apiserver.Server, d *daemon.Daemon, c *cluster.Cluster) {
 		pluginrouter.NewRouter(d.PluginManager()),
 	}
 
+	//如果允许网络控制，则添加network相关的路由
 	if d.NetworkControllerEnabled() {
 		routers = append(routers, network.NewRouter(d, c))
 	}
 
+	//如果是experimental模式将所有路由数据项中的experimental模式下的api路由功能激活
 	if d.HasExperimental() {
 		for _, r := range routers {
 			for _, route := range r.Routes() {
@@ -487,6 +514,7 @@ func initRouter(s *apiserver.Server, d *daemon.Daemon, c *cluster.Cluster) {
 		}
 	}
 
+	//根据设置好的路由表routers来初始化apiServer的路由器
 	s.InitRouter(utils.IsDebugEnabled(), routers...)
 }
 

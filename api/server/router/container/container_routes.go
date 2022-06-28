@@ -143,6 +143,7 @@ func (s *containerRouter) postContainersStart(ctx context.Context, w http.Respon
 			return err
 		}
 
+		//获取hostConfig配置信息
 		c, err := s.decoder.DecodeHostConfig(r.Body)
 		if err != nil {
 			return err
@@ -156,6 +157,7 @@ func (s *containerRouter) postContainersStart(ctx context.Context, w http.Respon
 
 	checkpoint := r.Form.Get("checkpoint")
 	checkpointDir := r.Form.Get("checkpoint-dir")
+	//调用ContainerStart进一步启动容器，2.详细分析
 	if err := s.backend.ContainerStart(vars["name"], hostConfig, checkpoint, checkpointDir); err != nil {
 		return err
 	}
@@ -360,8 +362,10 @@ func (s *containerRouter) postContainersCreate(ctx context.Context, w http.Respo
 		return err
 	}
 
+	//从http的form表单中获取名字，应该就是"/containers/create"吧？
 	name := r.Form.Get("name")
 
+	//获取从client传过来的Config、hostConfig和networkingConfig配置信息
 	config, hostConfig, networkingConfig, err := s.decoder.DecodeConfig(r.Body)
 	if err != nil {
 		return err
@@ -374,6 +378,7 @@ func (s *containerRouter) postContainersCreate(ctx context.Context, w http.Respo
 		hostConfig.AutoRemove = false
 	}
 
+	//传入配置信息，调用ContainerCreate进一步创建容器
 	ccr, err := s.backend.ContainerCreate(types.ContainerCreateConfig{
 		Name:             name,
 		Config:           config,
@@ -385,6 +390,7 @@ func (s *containerRouter) postContainersCreate(ctx context.Context, w http.Respo
 		return err
 	}
 
+	//给client返回结果
 	return httputils.WriteJSON(w, http.StatusCreated, ccr)
 }
 

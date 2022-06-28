@@ -90,6 +90,7 @@ func New(stateDir string, options ...RemoteOption) (_ Remote, err error) {
 	}
 
 	if r.startDaemon {
+		// 启动containerd进程
 		if err := r.runContainerdDaemon(); err != nil {
 			return nil, err
 		}

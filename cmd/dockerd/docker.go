@@ -26,11 +26,13 @@ type daemonOptions struct {
 }
 
 func newDaemonCommand() *cobra.Command {
+	//获取配置信息
 	opts := daemonOptions{
 		daemonConfig: daemon.NewConfig(),
 		common:       cliflags.NewCommonOptions(),
 	}
 
+	//docker daemon命令行对象，与docker client中的相似
 	cmd := &cobra.Command{
 		Use:           "dockerd [OPTIONS]",
 		Short:         "A self-sufficient runtime for containers.",
@@ -44,8 +46,9 @@ func newDaemonCommand() *cobra.Command {
 	}
 	cli.SetupRootCommand(cmd)
 
+	//解析命令
 	flags := cmd.Flags()
-	flags.BoolVarP(&opts.version, "version", "v", false, "Print version information and quit")
+	flags.BoolVarP(&opts.version, "version", "v", false, "Print version information and quit") //设置docker daemon启动的时候是否使用了version等一些命令
 	flags.StringVar(&opts.configFile, flagDaemonConfigFile, defaultDaemonConfigFile, "Daemon configuration file")
 	opts.common.InstallFlags(flags)
 	opts.daemonConfig.InstallFlags(flags)
@@ -60,6 +63,7 @@ func runDaemon(opts daemonOptions) error {
 		return nil
 	}
 
+	// 生成daemon对象
 	daemonCli := NewDaemonCli()
 
 	// Windows specific settings as these are not defaulted.
@@ -83,6 +87,7 @@ func runDaemon(opts daemonOptions) error {
 		return nil
 	}
 
+	// daemon启动
 	err = daemonCli.start(opts)
 	notifyShutdown(err)
 	return err
@@ -101,6 +106,7 @@ func main() {
 	_, stdout, stderr := term.StdStreams()
 	logrus.SetOutput(stderr)
 
+	// 构建一个docker服务器命令行接口对象，命令行接口包含了docker服务器所有可以执行的命令，并通过每一个命令结构体对象中的Run等成员函数来具体执行
 	cmd := newDaemonCommand()
 	cmd.SetOutput(stdout)
 	if err := cmd.Execute(); err != nil {

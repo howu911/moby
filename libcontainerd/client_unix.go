@@ -59,6 +59,7 @@ func (clnt *client) Create(containerID string, checkpoint string, checkpointDir 
 		return err
 	}
 
+	//生成一个libcontainerd.container对象
 	container := clnt.newContainer(filepath.Join(dir, containerID), options...)
 	if err := container.clean(); err != nil {
 		return err
@@ -71,10 +72,12 @@ func (clnt *client) Create(containerID string, checkpoint string, checkpointDir 
 		}
 	}()
 
+	//创建目录
 	if err := idtools.MkdirAllAs(container.dir, 0700, uid, gid); err != nil && !os.IsExist(err) {
 		return err
 	}
 
+	//生成文件config.json
 	f, err := os.Create(filepath.Join(container.dir, configFilename))
 	if err != nil {
 		return err
@@ -84,6 +87,7 @@ func (clnt *client) Create(containerID string, checkpoint string, checkpointDir 
 		return err
 	}
 
+	//调用container.start()进一步启动container，在5.中继续分析
 	return container.start(checkpoint, checkpointDir, attachStdio)
 }
 

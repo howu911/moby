@@ -139,6 +139,7 @@ func (ctr *container) start(checkpoint string, checkpointDir string, attachStdio
 		return err
 	})
 
+	//CreateContainerRequest对象，应该是保存一些容器信息给libcontainer start时使用
 	r := &containerd.CreateContainerRequest{
 		Id:            ctr.containerID,
 		BundlePath:    ctr.dir,
@@ -159,6 +160,7 @@ func (ctr *container) start(checkpoint string, checkpointDir string, attachStdio
 		return err
 	}
 
+	//发送CreateContainerRequest RPC请求给docker-containerd，这部分还不是很了解
 	resp, err := ctr.client.remote.apiClient.CreateContainer(context.Background(), r)
 	if err != nil {
 		ctr.closeFifos(iopipe)

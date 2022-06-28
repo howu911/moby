@@ -31,7 +31,7 @@ type runOptions struct {
 	detachKeys string
 }
 
-// NewRunCommand create a new `docker run` command
+// NewRunCommand create a new `docker run` command   //ljt docker run
 func NewRunCommand(dockerCli *command.DockerCli) *cobra.Command {
 	var opts runOptions
 	var copts *runconfigopts.ContainerOptions
@@ -78,6 +78,7 @@ func runRun(dockerCli *command.DockerCli, flags *pflag.FlagSet, opts *runOptions
 		ErrConflictAttachDetach = fmt.Errorf("Conflicting options: -a and -d")
 	)
 
+	// config：描述容器本身的配置信息 hostConfig：描述容器与宿主机之间的配置信息
 	config, hostConfig, networkingConfig, err := runconfigopts.Parse(flags, copts)
 
 	// just in case the Parse does not exit
@@ -212,7 +213,7 @@ func runRun(dockerCli *command.DockerCli, flags *pflag.FlagSet, opts *runOptions
 
 	statusChan := waitExitOrRemoved(ctx, dockerCli, createResponse.ID, autoRemove)
 
-	//start the container
+	//start the container   此处容器start
 	if err := client.ContainerStart(ctx, createResponse.ID, types.ContainerStartOptions{}); err != nil {
 		// If we have holdHijackedConnection, we should notify
 		// holdHijackedConnection we are going to exit and wait

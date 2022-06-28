@@ -35,7 +35,7 @@ func (r *containerRouter) Routes() []router.Route {
 	return r.routes
 }
 
-// initRoutes initializes the routes in container router
+// initRoutes initializes the routes in container router  container相关操作的路由表
 func (r *containerRouter) initRoutes() {
 	r.routes = []router.Route{
 		// HEAD

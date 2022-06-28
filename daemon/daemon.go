@@ -30,6 +30,7 @@ import (
 	"github.com/docker/docker/dockerversion"
 	"github.com/docker/docker/plugin"
 	"github.com/docker/libnetwork/cluster"
+
 	// register graph drivers
 	_ "github.com/docker/docker/daemon/graphdriver/register"
 	dmetadata "github.com/docker/docker/distribution/metadata"
@@ -37,7 +38,7 @@ import (
 	"github.com/docker/docker/image"
 	"github.com/docker/docker/layer"
 	"github.com/docker/docker/libcontainerd"
-	"github.com/docker/docker/migrate/v1"
+	v1 "github.com/docker/docker/migrate/v1"
 	"github.com/docker/docker/pkg/fileutils"
 	"github.com/docker/docker/pkg/idtools"
 	"github.com/docker/docker/pkg/plugingetter"
@@ -275,6 +276,7 @@ func (daemon *Daemon) restore() error {
 		}(c)
 	}
 	wg.Wait()
+	// 初始化网络，包括none  host  bridge网络模式
 	daemon.netController, err = daemon.initNetworkController(daemon.configStore, activeSandboxes)
 	if err != nil {
 		return fmt.Errorf("Error initializing network controller: %v", err)

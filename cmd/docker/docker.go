@@ -20,9 +20,12 @@ import (
 )
 
 func newDockerCommand(dockerCli *command.DockerCli) *cobra.Command {
+	// 选项结构对象，之后通过传入的选项参数进行填充
 	opts := cliflags.NewClientOptions()
+	// 选项集合
 	var flags *pflag.FlagSet
 
+	// 定义主命令
 	cmd := &cobra.Command{
 		Use:              "docker [OPTIONS] COMMAND [ARG...]",
 		Short:            "A self-sufficient runtime for containers",
@@ -30,7 +33,7 @@ func newDockerCommand(dockerCli *command.DockerCli) *cobra.Command {
 		SilenceErrors:    true,
 		TraverseChildren: true,
 		Args:             noArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, args []string) error { // 命令执行函数
 			if opts.Version {
 				showVersion()
 				return nil
@@ -51,6 +54,7 @@ func newDockerCommand(dockerCli *command.DockerCli) *cobra.Command {
 			return isSupported(cmd, dockerCli.Client().ClientVersion(), dockerCli.HasExperimental())
 		},
 	}
+	// 设置默认处理方式
 	cli.SetupRootCommand(cmd)
 
 	cmd.SetHelpFunc(func(ccmd *cobra.Command, args []string) {
@@ -73,14 +77,15 @@ func newDockerCommand(dockerCli *command.DockerCli) *cobra.Command {
 		}
 	})
 
+	// 为主命令添加选项
 	flags = cmd.Flags()
 	flags.BoolVarP(&opts.Version, "version", "v", false, "Print version information and quit")
 	flags.StringVar(&opts.ConfigDir, "config", cliconfig.ConfigDir(), "Location of client config files")
 	opts.Common.InstallFlags(flags)
 
 	cmd.SetOutput(dockerCli.Out())
-	cmd.AddCommand(newDaemonCommand())
-	commands.AddCommands(cmd, dockerCli)
+	cmd.AddCommand(newDaemonCommand())   // 添加daemon选项，已经作废
+	commands.AddCommands(cmd, dockerCli) // 添加子命令以及子命令的选项
 
 	return cmd
 }
@@ -93,6 +98,7 @@ func noArgs(cmd *cobra.Command, args []string) error {
 		"docker: '%s' is not a docker command.\nSee 'docker --help'", args[0])
 }
 
+// docker client的main函数
 func main() {
 	// Set terminal emulation based on platform as required.
 	stdin, stdout, stderr := term.StdStreams()

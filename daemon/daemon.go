@@ -470,7 +470,7 @@ func (daemon *Daemon) setClusterProvider(clusterProvider cluster.Provider) {
 	go daemon.netController.SetClusterProvider(clusterProvider)
 }
 
-// IsSwarmCompatible verifies if the current daemon
+// IsSwarmCompatible verifies if the current daemon ljt
 // configuration is compatible with the swarm mode
 func (daemon *Daemon) IsSwarmCompatible() error {
 	if daemon.configStore == nil {
